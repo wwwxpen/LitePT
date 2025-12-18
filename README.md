@@ -11,7 +11,7 @@ University of Zurich
 
 <a href="https://arxiv.org/abs/2512.13689"><img src="https://img.shields.io/badge/arXiv-LitePT-red" alt="Paper PDF"></a>
 <a href="https://litept.github.io/"><img src="https://img.shields.io/badge/Project_Page-LitePT-green" alt="Project Page"></a>
-<a href='https://huggingface.co/yuanwenyue/LitePT'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue' alt="HF Model"></a>
+<a href='https://huggingface.co/prs-eth/LitePT'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue' alt="HF Model"></a>
 
 <img
   src="https://raw.githubusercontent.com/LitePT/LitePT.github.io/main/assets/figures/teaser.png"
