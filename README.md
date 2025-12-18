@@ -30,7 +30,7 @@ University of Zurich
 ## Preparation
 
 ### Environment
-* Create an environment and install pytorch and other required packages:
+- Create an environment and install pytorch and other required packages:
   ```shell
   git clone https://github.com/prs-eth/LitePT.git
   cd LitePT
@@ -45,22 +45,27 @@ University of Zurich
   # flash attention
   pip install git+https://github.com/Dao-AILab/flash-attention.git
   ```
-* Compile CUDA-based Python modules:
+- PointROPE. Modify the ```all_cuda_archs``` in ```libs/pointrope/setup.py``` to your GPU arch, e.g. 8.6: GeForce RTX 3090; 9.0: NVIDIA H100; more info: https://developer.nvidia.com/cuda/gpus
   ```shell
-  # pointrope
-  # modify the all_cuda_archs in libs/pointrope/setup.py to your GPU arch
-  # e.g. 8.6: GeForce RTX 3090; 9.0: NVIDIA H100; more info: https://developer.nvidia.com/cuda/gpus
   cd libs/pointrope
   python setup.py install
-  # pointops
-  cd libs/pointops
-  python setup.py install
-  # the following is optional, only required for pointgroup instance segmentation
-  cd libs/sparsehash
-  python setup.py install
-  cd libs/pointgroup_ops
-  python setup.py install
+  cd ../..
   ```
+
+- Additional requirements. The requirements below are optional, and only required for evaluator and PointGroup instance segmentation. 
+  * For evaluator:
+    ```
+    cd libs/pointops
+    python setup.py install
+    cd ../..
+    ```
+  * For PointGroup:
+    ```
+    conda install -c bioconda google-sparsehash 
+    cd libs/pointgroup_ops
+    python setup.py install
+    cd ../..
+    ```
 
 
 ### Data
@@ -72,22 +77,22 @@ We prepare and organize the data in the same way with Pointcept [Data Preparatio
 ### Semantic segmentation 
 | Model | Params | Benchmark  | val mIoU | Config | Checkpoint |
 |:-|-:|:-:|:-:|:-:|:-:|
-| LitePT-S | 12.7M | NuScenes | 82.2 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/nuscenes/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/nuscenes-semseg-litept-small-v1m1/model/model_best.pth) |
-| LitePT-S | 12.7M | Waymo | 73.1 |[link](https://github.com/prs-eth/LitePT/blob/main/configs/waymo/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/waymo-semseg-litept-small-v1m1/model/model_best.pth) |
-| LitePT-S | 12.7M | ScanNet  | 76.5 |[link](https://github.com/prs-eth/LitePT/blob/main/configs/scannet/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/scannet-semseg-litept-small-v1m1/model/model_best.pth) |
-| LitePT-S | 16.0M | Structured3D | 83.6 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/structured3d/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/structured3d-semseg-litept-small-v1m1/model/model_best.pth) |
-| LitePT-B | 45.1M | Structured3D | 85.1  | [link](https://github.com/prs-eth/LitePT/blob/main/configs/structured3d/semseg-litept-base-v1m1.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/structured3d-semseg-litept-base-v1m1/model/model_best.pth) |
-| LitePT-L | 85.9M | Structured3D | 85.4 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/structured3d/semseg-litept-large-v1m1.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/structured3d-semseg-litept-large-v1m1/model/model_best.pth) |
+| LitePT-S | 12.7M | NuScenes | 82.2 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/nuscenes/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/nuscenes-semseg-litept-small-v1m1/model/model_best.pth) |
+| LitePT-S | 12.7M | Waymo | 73.1 |[link](https://github.com/prs-eth/LitePT/blob/main/configs/waymo/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/waymo-semseg-litept-small-v1m1/model/model_best.pth) |
+| LitePT-S | 12.7M | ScanNet  | 76.5 |[link](https://github.com/prs-eth/LitePT/blob/main/configs/scannet/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/scannet-semseg-litept-small-v1m1/model/model_best.pth) |
+| LitePT-S | 12.7M | Structured3D | 83.6 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/structured3d/semseg-litept-small-v1m1.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/structured3d-semseg-litept-small-v1m1/model/model_best.pth) |
+| LitePT-B | 45.1M | Structured3D | 85.1  | [link](https://github.com/prs-eth/LitePT/blob/main/configs/structured3d/semseg-litept-base-v1m1.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/structured3d-semseg-litept-base-v1m1/model/model_best.pth) |
+| LitePT-L | 85.9M | Structured3D | 85.4 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/structured3d/semseg-litept-large-v1m1.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/structured3d-semseg-litept-large-v1m1/model/model_best.pth) |
 
 ### Instance segmentation 
 | Model | Params | Benchmark  | mAP<sub>25</sub> | mAP<sub>50</sub> | mAP | Config | Checkpoint |
 |:-|-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| LitePT-S* | 16.0M | ScanNet | 78.5 | 64.9 | 41.7 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/scannet/insseg-litept-small-v1m2.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/scannet-insseg-litept-small-v1m2/model/model_best.pth) |
-| LitePT-S* | 16.0M | ScanNet200 | 40.3 | 33.1 | 22.2 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/scannet200/insseg-litept-small-v1m2.py) | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/scannet200-insseg-litept-small-v1m2/model/model_best.pth) |
+| LitePT-S* | 16.0M | ScanNet | 78.5 | 64.9 | 41.7 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/scannet/insseg-litept-small-v1m2.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/scannet-insseg-litept-small-v1m2/model/model_best.pth) |
+| LitePT-S* | 16.0M | ScanNet200 | 40.3 | 33.1 | 22.2 | [link](https://github.com/prs-eth/LitePT/blob/main/configs/scannet200/insseg-litept-small-v1m2.py) | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/scannet200-insseg-litept-small-v1m2/model/model_best.pth) |
 ### Object detection
 | Model | Params | Benchmark  | mAPH | Config | Checkpoint |
 |:-|-:|:-:|:-:|:-:|:-:|
-| LitePT | 9.0M | Waymo  | 70.7 | link | [Download](https://huggingface.co/yuanwenyue/LitePT/blob/main/waymo-objdet-litept-small-v1m3/model/model_best.pth) |
+| LitePT | 9.0M | Waymo  | 70.7 | link | [Download](https://huggingface.co/prs-eth/LitePT/blob/main/waymo-objdet-litept-small-v1m3/model/model_best.pth) |
 
 
 ## Training
@@ -101,11 +106,11 @@ sh scripts/train.sh -g 4 -d waymo -c semseg-litept-small-v1m1 -n semseg-litept-s
 ### ScanNet + LitePT-S
 sh scripts/train.sh -g 4 -d scannet -c semseg-litept-small-v1m1 -n semseg-litept-small-v1m1
 ### Structured3D + LitePT-S
-sh scripts/train.sh -g 4 -d structured3d -c semseg-litept-small-v1m1 -n semseg-litept-small-v1m1
+sh scripts/train.sh -g 16 -d structured3d -c semseg-litept-small-v1m1 -n semseg-litept-small-v1m1
 ### Structured3D + LitePT-B
-sh scripts/train.sh -g 4 -d structured3d -c semseg-litept-base-v1m1 -n semseg-litept-base-v1m1
+sh scripts/train.sh -g 16 -d structured3d -c semseg-litept-base-v1m1 -n semseg-litept-base-v1m1
 ### Structured3D + LitePT-L
-sh scripts/train.sh -g 4 -d structured3d -c semseg-litept-large-v1m1 -n semseg-litept-large-v1m1
+sh scripts/train.sh -g 16 -d structured3d -c semseg-litept-large-v1m1 -n semseg-litept-large-v1m1
 ```
 
 ###  Instance segmentation
