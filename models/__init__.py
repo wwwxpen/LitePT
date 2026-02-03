@@ -7,3 +7,6 @@ from .litept import *
 
 # Instance Segmentation
 from .point_group import *
+
+# 【新增】 导入 ditr 模块
+from .ditr import *

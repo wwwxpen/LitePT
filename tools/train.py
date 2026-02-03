@@ -6,6 +6,9 @@ from engines.defaults import (
 from engines.train import TRAINERS
 from engines.launch import launch
 
+import os
+os.environ["WANDB_MODE"] = "disabled"
+os.environ["WANDB_DISABLED"] = "true"
 
 def main_worker(cfg):
     cfg = default_setup(cfg)

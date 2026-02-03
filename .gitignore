@@ -1,2 +1,5 @@
 data
 exp
+**/build/
+__pycache__
+*.egg-info/
