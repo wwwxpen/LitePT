@@ -9,7 +9,8 @@ from .defaults import DefaultDataset
 from PIL import Image
 import open3d as o3d
 import torch
-import torchvision.transforms as T  # 【新增】
+import torchvision.transforms as T
+from concurrent.futures import ThreadPoolExecutor
 
 
 @DATASETS.register_module()
@@ -114,70 +115,72 @@ class NuScenesDataset(DefaultDataset):
         # 【新增】 视觉模态加载逻辑 (参考自 NuScenesImagePointDataset)
         # ======================================================================
         if self.load_camera and "cams" in data:
-            imgs = []
-            intrinsics = []
-            extrinsics = [] # Lidar -> Camera 的变换矩阵
-            # print(f"\n=== Processing sample: {self.get_data_name(idx)} ===")
-            # print(f"Available cameras in data: {list(data['cams'].keys())}")
-            for cam_name in self.CAMERA_TYPES:
-                # 1. 获取 Info
-                if cam_name not in data["cams"]:
-                    # 极其罕见的情况，填充全0或跳过，这里假设数据完整
-                    continue
-                cam_info = data["cams"][cam_name]
-                # print(f"  Camera token: {cam_info.get('sample_token', 'N/A')}")
-                # print(f"  Data path: {cam_info.get('data_path', 'N/A')}")
+            cam_names = self.CAMERA_TYPES
+            num_cams = len(cam_names)
+            
+            # 预分配空间 (NumPy 数组操作通常比列表快)
+            all_imgs = [None] * num_cams
+            all_intrinsics = np.zeros((num_cams, 3, 3), dtype=np.float32)
+            all_extrinsics = np.zeros((num_cams, 4, 4), dtype=np.float32) # Lidar->Camera的变换矩阵
+            
+            # 定义一个读取函数用于并行
+            def load_single_cam(i, name):
+                if name not in data["cams"]:
+                    return None
+                c_info = data["cams"][name]
+                img_path = os.path.join(self.data_root, "raw", c_info["data_path"])
                 
-                # 2. 读取并处理图片
-                img_path = os.path.join(self.data_root, "raw", cam_info["data_path"])
+                # 优化：PIL 在 open 时不读入内存，只有在 load 或 transform 时才读
                 # 必须转为 RGB，防止有 PNG alpha 通道或者灰度图
-                img_pil = Image.open(img_path).convert('RGB') 
-                
-                # 记录原始尺寸用于缩放内参
-                w_orig, h_orig = img_pil.size
-                
+                img_pil = Image.open(img_path).convert('RGB')
                 # Transform (Resize -> ToTensor -> Normalize)
                 img_tensor = self.transform_img(img_pil)
-                imgs.append(img_tensor)
+
+                w_orig, h_orig = img_pil.size
                 
-                # 3. 处理内参 (Intrinsics)
-                # 因为图片 Resize 了，内参矩阵也需要相应缩放
-                intr = np.eye(3)
-                intr[:3, :3] = cam_info["camera_intrinsics"]
-                
-                # 计算缩放比例
+                # 计算内参缩放，# 因为图片Resize了，内参矩阵也需要相应缩放
                 h_target, w_target = self.img_size
-                scale_w = w_target / w_orig
-                scale_h = h_target / h_orig
+                # 计算缩放比例
+                scale_w, scale_h = w_target / w_orig, h_target / h_orig
                 
+                intr = np.array(c_info["camera_intrinsics"], dtype=np.float32).reshape(3, 3)
                 # 调整 fx, cx
                 intr[0, 0] *= scale_w
                 intr[0, 2] *= scale_w
                 # 调整 fy, cy
                 intr[1, 1] *= scale_h
                 intr[1, 2] *= scale_h
-                intrinsics.append(intr)
-                # print(f"  Intrinsics (original): {cam_info['camera_intrinsics']}")
-                # print(f"  Intrinsics (scaled {scale_w:.3f}x{scale_h:.3f}):\n{intr}")
                 
-                # 4. 处理外参 (Extrinsics: Lidar -> Camera)
+                # 处理外参 (Extrinsics: Lidar -> Camera)
                 # Info 中通常给出的是 Sensor(Cam) -> Lidar 的变换
                 sensor2lidar = np.eye(4)
-                sensor2lidar[:3, :3] = cam_info["sensor2lidar_rotation"]
-                sensor2lidar[:3, 3] = cam_info["sensor2lidar_translation"]
+                sensor2lidar[:3, :3] = c_info["sensor2lidar_rotation"]
+                sensor2lidar[:3, 3] = c_info["sensor2lidar_translation"]
                 # 我们需要 Lidar -> Camera，所以求逆
                 lidar2sensor = np.linalg.inv(sensor2lidar)
-                extrinsics.append(lidar2sensor)
-                # print(f"  sensor2lidar rotation:\n{cam_info['sensor2lidar_rotation']}")
-                # print(f"  sensor2lidar translation: {cam_info['sensor2lidar_translation']}")
+                
+                return i, img_tensor, intr, lidar2sensor
 
-            # 堆叠并转为 Tensor
-            if len(imgs) == 6:
-                data_dict['imgs'] = torch.stack(imgs) # [6, 3, H, W]
-                data_dict['intrinsics'] = torch.tensor(np.stack(intrinsics), dtype=torch.float32) # [6, 3, 3]
-                data_dict['extrinsics'] = torch.tensor(np.stack(extrinsics), dtype=torch.float32) # [6, 4, 4]
-            else:
-                # 容错处理：如果数据不全，可能会报错，实际 nuScenes 数据通常是完整的
+            # 使用线程池并行处理 6 张图，使用 context manager 确保线程池用完即销毁
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                results = list(executor.map(lambda p: load_single_cam(*p), enumerate(cam_names)))
+
+            # 组装数据，堆叠并转为Tensor
+            valid_imgs = []
+            for res in results:
+                if res is None: continue
+                idx_cam, img_t, intr, l2s = res
+                all_imgs[idx_cam] = img_t
+                all_intrinsics[idx_cam] = intr
+                all_extrinsics[idx_cam] = l2s
+                valid_imgs.append(img_t)
+            
+            data_dict['imgs'] = torch.stack(all_imgs)
+            data_dict['intrinsics'] = torch.from_numpy(all_intrinsics)
+            data_dict['extrinsics'] = torch.from_numpy(all_extrinsics)
+
+            if len(valid_imgs) != num_cams:
+                # 极其罕见的情况，这里假设数据完整
                 print(f"Warning: {self.get_data_name(idx)} missing cameras.")
 
         return data_dict
