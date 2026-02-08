@@ -11,10 +11,7 @@ from models.utils.structure import Point
 from .ditr_utils import DINOFeatureExtractor, DITRInjector
 from .ditr_vis import DITRVisualizer
 
-try:
-    from torch_scatter import scatter_max
-except ImportError:
-    pass
+from torch_scatter import scatter_max
 
 @MODELS.register_module("PDITR_LitePT")
 class PDITR_LitePT(LitePT):
@@ -85,9 +82,9 @@ class PDITR_LitePT(LitePT):
                 )
 
     def forward(self, data_dict):
-        # 1. 预处理：如果是测试模式且关闭了视觉，直接走 LitePT 原生路径
-        # if not self.use_visual_modality:
-        #     return super().forward(data_dict)
+        # 预处理：如果是测试模式且关闭了视觉，直接走 LitePT 原生路径
+        if not self.use_visual_modality:
+            return super().forward(data_dict)
         #  可视化
         if self.use_visual_modality and hasattr(self, 'vis') and self.vis is not None:
             # 使用batch_index或scene_id作为frame_id
@@ -155,8 +152,6 @@ class PDITR_LitePT(LitePT):
                 if dino_feat_current is not None:
                     if hasattr(point, "pooling_inverse"):
                         cluster_idx = point.pooling_inverse
-                        # 确保引入了 scatter_max
-                        from torch_scatter import scatter_max
                         dino_feat_next, _ = scatter_max(
                             dino_feat_current, 
                             cluster_idx, 

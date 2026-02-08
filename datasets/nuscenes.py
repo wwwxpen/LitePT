@@ -12,6 +12,8 @@ import torch
 import torchvision.transforms as T
 from concurrent.futures import ThreadPoolExecutor
 
+from turbojpeg import TurboJPEG, TJPF_RGB, TJSAMP_420
+import cv2
 
 @DATASETS.register_module()
 class NuScenesDataset(DefaultDataset):
@@ -37,11 +39,14 @@ class NuScenesDataset(DefaultDataset):
         self.img_size = img_size
         # DINOv2 官方推荐的归一化参数
         if self.load_camera:
-            self.transform_img = T.Compose([
-                T.Resize(self.img_size), # Resize ((h, w))
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
+            # self.transform_img = T.Compose([
+            #     T.Resize(self.img_size), # Resize ((h, w))
+            #     T.ToTensor(),
+            #     T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            # ])
+            # 提前转为 numpy 格式，方便在线程中直接计算
+            self.img_mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+            self.img_std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
 
         super().__init__(ignore_index=ignore_index, **kwargs)
 
@@ -115,6 +120,16 @@ class NuScenesDataset(DefaultDataset):
         # 【新增】 视觉模态加载逻辑 (参考自 NuScenesImagePointDataset)
         # ======================================================================
         if self.load_camera and "cams" in data:
+            #---  懒加载TurboJPEG(解决之前提到的spawn报错) ---
+            if not hasattr(self, 'jpeg'):
+                # 这里的 self.jpeg 是在子进程里创建的，不会被 pickle 传输
+                self.jpeg = TurboJPEG()
+            # --- 懒加载持久化线程池 ---
+            if not hasattr(self, 'executor'):
+                from concurrent.futures import ThreadPoolExecutor
+                # 这里的线程数可以根据你的相机数量设定（通常 nuScenes 是 6）
+                self.executor = ThreadPoolExecutor(max_workers=6)
+
             cam_names = self.CAMERA_TYPES
             num_cams = len(cam_names)
             
@@ -130,13 +145,30 @@ class NuScenesDataset(DefaultDataset):
                 c_info = data["cams"][name]
                 img_path = os.path.join(self.data_root, "raw", c_info["data_path"])
                 
-                # 优化：PIL 在 open 时不读入内存，只有在 load 或 transform 时才读
-                # 必须转为 RGB，防止有 PNG alpha 通道或者灰度图
-                img_pil = Image.open(img_path).convert('RGB')
-                # Transform (Resize -> ToTensor -> Normalize)
-                img_tensor = self.transform_img(img_pil)
+                # # 优化：PIL 在 open 时不读入内存，只有在 load 或 transform 时才读
+                # # 必须转为 RGB，防止有 PNG alpha 通道或者灰度图
+                # img_pil = Image.open(img_path).convert('RGB')
+                # # Transform (Resize -> ToTensor -> Normalize)
+                # img_tensor = self.transform_img(img_pil)
+                # w_orig, h_orig = img_pil.size
 
-                w_orig, h_orig = img_pil.size
+                # 1. TurboJPEG 解码 (直接出 RGB Numpy 数组)
+                with open(img_path, 'rb') as f:
+                    img_rgb = self.jpeg.decode(f.read(), pixel_format=TJPF_RGB)
+                h_orig, w_orig = img_rgb.shape[:2]
+                h_target, w_target = self.img_size # (h, w)
+                # 2. 替换 T.Resize: 使用 OpenCV (通常比 PIL 快)
+                if (h_orig, w_orig) != (h_target, w_target):
+                    # cv2.resize 接收 (width, height)
+                    img_rgb = cv2.resize(img_rgb, (w_target, h_target), interpolation=cv2.INTER_LINEAR)
+                # 3. 替换 T.ToTensor & T.Normalize: 使用 Numpy 向量化运算
+                # (H, W, 3) -> float32 -> /255 -> 减均值 -> 除标准差
+                img_tensor = (img_rgb.astype(np.float32) / 255.0 - self.img_mean) / self.img_std
+                # 4. HWC -> CHW (符合 Torch 格式)
+                img_tensor = img_tensor.transpose(2, 0, 1)
+                # 转为 Tensor 并不拷贝内存（from_numpy 是共享内存的）
+                img_tensor = torch.from_numpy(img_tensor)
+                
                 
                 # 计算内参缩放，# 因为图片Resize了，内参矩阵也需要相应缩放
                 h_target, w_target = self.img_size
@@ -162,8 +194,9 @@ class NuScenesDataset(DefaultDataset):
                 return i, img_tensor, intr, lidar2sensor
 
             # 使用线程池并行处理 6 张图，使用 context manager 确保线程池用完即销毁
-            with ThreadPoolExecutor(max_workers=6) as executor:
-                results = list(executor.map(lambda p: load_single_cam(*p), enumerate(cam_names)))
+            # with ThreadPoolExecutor(max_workers=6) as executor:
+            #     results = list(executor.map(lambda p: load_single_cam(*p), enumerate(cam_names)))
+            results = list(self.executor.map(lambda p: load_single_cam(*p), enumerate(cam_names)))
 
             # 组装数据，堆叠并转为Tensor
             valid_imgs = []
