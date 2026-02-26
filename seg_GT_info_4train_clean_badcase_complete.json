@@ -1,0 +1,52 @@
+[
+    {
+        "pcd_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd.pcd",
+        "pcd_name": "20240721_163849412_imotion_zeeker6831_0_0007_new_pcd.pcd",
+        "scene_path": "/imo-baidu-label/segment_20241118/Parking_PC_240721_imotion-platform-idc500_zeeker6831_WuHuA_0/samples/scene319",
+        "bag_path": "/imo-baidu-label/segment_20241118/Parking_PC_240721_imotion-platform-idc500_zeeker6831_WuHuA_0",
+        "full_name": "20240721_163849412_imotion_zeeker6831_0_0007",
+        "json_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/data.json",
+        "tvFront_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_2_0007.png",
+        "tvRear_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_0_0007.png",
+        "tvLeft_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_3_0007.png",
+        "tvRight_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_1_0007.png"
+    },
+    {
+        "pcd_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104.pcd",
+        "pcd_name": "P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104.pcd",
+        "scene_name": "scene122",
+        "timestamp": "1765261902_623975104",
+        "bag_path": "/standard-data-produced/P_SuZhou_20251209-134922_T1J-4029_0",
+        "scene_path": "/standard-data-produced/P_SuZhou_20251209-134922_T1J-4029_0/samples/scene122",
+        "json_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/data.json",
+        "tvFront_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvFront_raw_1765261902_623975104.jpg",
+        "tvRear_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvRear_raw_1765261902_623975104.jpg",
+        "tvLeft_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvLeft_raw_1765261902_623975104.jpg",
+        "tvRight_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvRight_raw_1765261902_623975104.jpg"
+    },
+    {
+        "pcd_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd.pcd",
+        "pcd_name": "20240721_163849412_imotion_zeeker6831_0_0007_new_pcd.pcd",
+        "scene_path": "/imo-baidu-label/segment_20241118/Parking_PC_240721_imotion-platform-idc500_zeeker6831_WuHuA_0/samples/scene319",
+        "bag_path": "/imo-baidu-label/segment_20241118/Parking_PC_240721_imotion-platform-idc500_zeeker6831_WuHuA_0",
+        "full_name": "20240721_163849412_imotion_zeeker6831_0_0007",
+        "json_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/data.json",
+        "tvFront_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_2_0007.png",
+        "tvRear_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_0_0007.png",
+        "tvLeft_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_3_0007.png",
+        "tvRight_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_1_0007.png"
+    },
+    {
+        "pcd_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104.pcd",
+        "pcd_name": "P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104.pcd",
+        "scene_name": "scene122",
+        "timestamp": "1765261902_623975104",
+        "bag_path": "/standard-data-produced/P_SuZhou_20251209-134922_T1J-4029_0",
+        "scene_path": "/standard-data-produced/P_SuZhou_20251209-134922_T1J-4029_0/samples/scene122",
+        "json_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/data.json",
+        "tvFront_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvFront_raw_1765261902_623975104.jpg",
+        "tvRear_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvRear_raw_1765261902_623975104.jpg",
+        "tvLeft_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvLeft_raw_1765261902_623975104.jpg",
+        "tvRight_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/P_SuZhou_20251209-134922_T1J-4029_0_scene122_1765261902_623975104/tvRight_raw_1765261902_623975104.jpg"
+    }
+]

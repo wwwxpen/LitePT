@@ -21,6 +21,15 @@ def collate_fn(batch):
         # str is also a kind of Sequence, judgement should before Sequence
         return list(batch)
     elif isinstance(batch[0], Sequence):
+        # 检查是否是字典列表（如 cam_params）
+        # 如果列表的第一个元素是字典，直接返回原列表
+        if batch and isinstance(batch[0], dict):
+            return batch
+        # 检查是否是包含字典的列表的列表（如 [cam_params1, cam_params2, ...]）
+        if batch and isinstance(batch[0], Sequence) and batch[0] and isinstance(batch[0][0], dict):
+            # 对于这种结构，我们直接返回原始列表，不做处理
+            return batch
+        # 修改结束
         for data in batch:
             data.append(torch.tensor([data[0].shape[0]]))
         batch = [collate_fn(samples) for samples in zip(*batch)]
@@ -29,7 +38,13 @@ def collate_fn(batch):
     elif isinstance(batch[0], Mapping):
         batch = {
             key: (
-                collate_fn([d[key] for d in batch])
+                # 对于cam_params，保持list of lists结构
+                [d[key] for d in batch] if key == "cam_params"
+                # 对于imgs，使用stack保持[B, V, C, H, W]维度
+                else torch.stack([torch.from_numpy(d[key]) if isinstance(d[key], np.ndarray) 
+                                 else d[key] for d in batch]) if (key == "imgs" or key == "extrinsics" or key == "img_target_size")
+                else collate_fn([d[key] for d in batch])
+                # 修改结束
                 if "offset" not in key
                 # offset -> bincount -> concat bincount-> concat offset
                 else torch.cumsum(

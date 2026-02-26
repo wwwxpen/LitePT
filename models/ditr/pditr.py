@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from functools import partial
 import random
+import numpy as np
 
 from models.builder import MODELS
 # 导入 PTv3
@@ -107,7 +108,9 @@ class PDITR_LitePT(LitePT):
         
         if self.use_visual_modality and "imgs" in data_dict:
             imgs = data_dict["imgs"]
+            # print(f"Input images shape: {imgs.shape}")  # [B, V, C, H, W]
             img_feats_maps = self.injector.dino(imgs)
+            # print(f"DINO feature maps shape: {img_feats_maps.shape}")  # [B, V, Dim, PH, PW]
 
             # 【修改】传入 segment (labels) 给 sample_from_maps
             # 注意：Point 类封装后，point.segment 或者 data_dict['segment'] 都可以
@@ -121,13 +124,14 @@ class PDITR_LitePT(LitePT):
             # 2. 为什么不直接用 coord？因为 coord 经历了数据增强（平移旋转），与相机外参不再对齐。
             # 3. 为什么不自定义字段？因为框架只对 color 等标准字段在 Sparsify 时进行同步下采样。
             proj_coord = point.color if "color" in point.keys() else point.coord
-            
+
             dino_feat_current = self.sample_from_maps(
                 proj_coord, 
                 offset2batch(point.offset), 
                 img_feats_maps, 
-                data_dict["intrinsics"], 
+                data_dict["cam_params"], 
                 data_dict["extrinsics"],
+                data_dict["img_target_size"], # [B, 2]
                 imgs,   # 【新增】传入原始图片用于可视化
                 labels  # 【新增】传入 Label 用于可视化
             )
@@ -218,268 +222,168 @@ class PDITR_LitePT(LitePT):
         return point
 
 
-    def sample_from_maps(self, points, batch, feature_maps, intrinsics, extrinsics, raw_imgs=None, raw_labels=None):
+    def project_points_unified(self, pc_cam, params, target_size):
+        """
+        通用投影函数 (PyTorch 实现)
+        pc_cam: [N, 3] 相机坐标系下的点
+        params: 单个相机的参数字典
+        target_size: [H, W] 目标图像尺寸
+        """
+        model = params['model']
+        H_target, W_target = target_size
+        H_base, W_base = params['base_size']
+        scale_h = H_target / H_base
+        scale_w = W_target / W_base
+
+        if model == "mei":
+            # 对应 mei_pro.py 逻辑
+            ksi = params['ksi']
+            k = params['k']
+            if len(k) == 4:
+                k.append(0.0)
+            k1, k2, p1, p2, k3 = k
+            u0, v0 = params['center']
+            gama1, gama2 = params['gama']
+            gama1 = gama1 * gama2 # 按照 mei_pro.py: gama1 = gama1 * gama2
+
+            # 归一化到单位球面
+            dist = torch.norm(pc_cam, dim=1, keepdim=True)
+            pts_norm = pc_cam / (dist + 1e-6)
+            
+            # 投影到平面
+            x_mu = pts_norm[:, 0:1] / (pts_norm[:, 2:3] + ksi)
+            y_mu = pts_norm[:, 1:2] / (pts_norm[:, 2:3] + ksi)
+            
+            # 畸变矫正 (按照 mei_pro.py 的 Xmd 逻辑)
+            rho2 = x_mu**2 + y_mu**2
+            # temp = 1 + k1*r^2 + k2*r^4 + k3*rho^3
+            temp = 1 + k1*rho2 + k2*(rho2**2) + k3*(rho2**3)
+            
+            # Xmd = Xmu * temp + 2*k3*Xmu*Ymu + k4*(rho + 2*Xmu^2)
+            u_distort = x_mu * temp + 2*p1*x_mu*y_mu + p2*(rho2 + 2*x_mu**2)
+            v_distort = y_mu * temp + 2*p2*x_mu*y_mu + p1*(rho2 + 2*y_mu**2)
+            
+            # 映射到像素并缩放
+            u = (u_distort * gama1 + u0) * scale_w
+            v = (v_distort * gama2 + v0) * scale_h
+            return u.flatten(), v.flatten()
+
+        elif model == "pinhole":
+            intr = params['intrinsic']
+            f_x, f_y = intr[0, 0], intr[1, 1]
+            c_x, c_y = intr[0, 2], intr[1, 2]
+            
+            # 基础投影
+            u = (pc_cam[:, 0] * f_x / (pc_cam[:, 2] + 1e-6)) + c_x
+            v = (pc_cam[:, 1] * f_y / (pc_cam[:, 2] + 1e-6)) + c_y
+            
+            # 如果有畸变参数且需要处理 (这里可以添加 pinhole 畸变逻辑，如果需要的话)
+            # 目前直接缩放
+            return u * scale_w, v * scale_h
+        
+        else:
+            raise ValueError(f"Unsupported camera model: {model} for camera")
+
+
+    def sample_from_maps(self, points, batch, feature_maps, cam_params, extrinsics, img_target_size, raw_imgs=None, raw_labels=None):
         with torch.inference_mode():
             B, V, Dim, PH, PW = feature_maps.shape
-            H_img, W_img = self.img_size
+            # 使用目标尺寸作为边界检查标准            
             # 预分配：point_features 存最终结果，hit_counts 记录每个点被多少个视角覆盖
             point_features = torch.zeros((points.shape[0], Dim), device=points.device, dtype=points.dtype)
             # 用来随机化的 Buffer：记录每个点来自各个视角的候选 (N, V, Dim)
             all_candidates = torch.zeros((points.shape[0], V, Dim), device=points.device, dtype=points.dtype)
             visible_mask = torch.zeros((points.shape[0], V), dtype=torch.bool, device=points.device)
-            
+
             # 检查并修正 intrinsics 和 extrinsics 的维度
-            # 如果它们被 Flatten 成了 [B*V, 3/4, 3/4] (3维)，需要 Reshape 回 [B, V, ...]
-            if intrinsics.dim() == 3: intrinsics = intrinsics.view(B, V, 3, 3)
             if extrinsics.dim() == 3: extrinsics = extrinsics.view(B, V, 4, 4)
 
             for b in range(B):
+                H_img, W_img = img_target_size[b][0], img_target_size[b][1]
+
                 b_mask = (batch == b)
                 if not b_mask.any(): continue
 
                 # 1. 提取点并强制规范维度
-                b_points = points[b_mask].view(-1, 3).float() # 一次性完成 提取+对齐+类型转换
+                b_points = points[b_mask].view(-1, 3).float()
 
                 # 准备 Label (如果提供了)
                 if hasattr(self, 'vis') and self.vis is not None:
                     b_labels = raw_labels[b_mask] if raw_labels is not None else torch.zeros(len(b_points))
                 
-                # 2. 构造齐次坐标 (这里 ones_like 就会自动拿到正确的 float 类型)
+                # 2. 构造齐次坐标
                 b_points_homo = torch.cat([b_points, torch.ones((b_points.shape[0], 1), device=b_points.device, dtype=b_points.dtype)], dim=1)
                 b_global_indices = torch.where(b_mask)[0]
                 
-                # 保存所有点的候选特征, 最后随机选择, key: 全局索引, value: 特征列表
                 for v in range(V):
                     # 此时 extrinsics[b, v] 保证是 [4, 4] 矩阵
-                    pc_cam = (extrinsics[b, v] @ b_points_homo.T).T
+                    pc_cam_homo = (extrinsics[b, v] @ b_points_homo.T).T
+                    # 转换为3D点：移除最后一维（应该是1）
+                    pc_cam = pc_cam_homo[:, :3] / pc_cam_homo[:, 3:4]  # 归一化
                     
                     depth = pc_cam[:, 2]
-                    
-                    pc_img = (intrinsics[b, v] @ pc_cam[:, :3].T).T
-                    u = pc_img[:, 0] / pc_img[:, 2]
-                    v_coord = pc_img[:, 1] / pc_img[:, 2]
+                    u, v_coord = self.project_points_unified(pc_cam, cam_params[b][v], (H_img, W_img))
 
                     valid = (depth > 0.1) & (u >= 0) & (u < W_img) & (v_coord >= 0) & (v_coord < H_img)
                     if not valid.any(): continue
                     
+                    # 注意：这里使用 self.patch_size 将坐标映射到 feature map 尺寸
                     u_p = (u[valid] / self.patch_size).long().clamp(0, PW - 1)
                     v_p = (v_coord[valid] / self.patch_size).long().clamp(0, PH - 1)
                     
                     # 获取特征 [N_valid, Dim]
                     sampled_feats = feature_maps[b, v, :, v_p, u_p].transpose(0, 1)
 
-                    # 填充候选矩阵 (无循环填充,不再使用字典和.item())
+                    # 填充候选矩阵
                     valid_global_idx = b_global_indices[valid]
                     all_candidates[valid_global_idx, v] = sampled_feats
                     visible_mask[valid_global_idx, v] = True
                     
                     if hasattr(self, 'vis') and self.vis is not None:
-                        # 为了可视化，我们需要先拿到当前 View 的所有特征分配情况
-                        # 创建一个临时的 feat 容器给可视化用
                         current_view_point_feats = torch.zeros((len(b_points), Dim), device=points.device)
-                        # 赋值给临时 (用于可视化)
                         current_view_point_feats[valid] = sampled_feats
-                        # 仅保存第一个 View (v=0) 以节省空间，或者全部保存
                         if raw_imgs is not None:
-                            if raw_imgs.dim() == 4:  # [B*N_views, C, H, W]
-                                # 计算每个batch的起始索引
-                                if raw_imgs.shape[0] == B * V:  # 期望的格式
-                                    image_idx = b * V + v
-                                    if image_idx < raw_imgs.shape[0]:
-                                        image = raw_imgs[image_idx]
-                                    else:
-                                        print(f"[WARNING] Image index {image_idx} out of bounds")
-                                        continue
-                                else:
-                                    # 使用简单的回退：只用第一个视图
-                                    if v == 0:
-                                        image = raw_imgs[b * (raw_imgs.shape[0] // B)]
-                                    else:
-                                        continue  # 只可视化第一个视图
-                            elif raw_imgs.dim() == 5:  # [B, N_views, C, H, W]
-                                if v < raw_imgs.shape[1]:
-                                    image = raw_imgs[b, v]
-                                else:
-                                    continue
-                            else:
-                                print(f"[WARNING] Unexpected image dim: {raw_imgs.dim()}")
-                                continue
+                            if raw_imgs.dim() == 4: # [B*V, C, H, W]
+                                image_idx = b * V + v
+                                image = raw_imgs[image_idx] if image_idx < raw_imgs.shape[0] else None
+                            elif raw_imgs.dim() == 5: # [B, V, C, H, W]
+                                image = raw_imgs[b, v]
+                            else: continue
 
-                            if hasattr(self, 'vis') and self.vis is not None:
+                            if image is not None:
                                 self.vis.process_frame(
                                     points = b_points,
                                     labels = b_labels,
                                     image = image,
                                     dino_map = feature_maps[b, v],
                                     dino_points_feat = current_view_point_feats,
-                                    proj_u = u[valid],          # 投影点 U
-                                    proj_v = v_coord[valid],    # 投影点 V
-                                    proj_depth = depth[valid],  # 传入可视点的深度
-                                    proj_labels = b_labels[valid] # 传入可视点的语义标签
+                                    proj_u = u[valid],
+                                    proj_v = v_coord[valid],
+                                    proj_depth = depth[valid],
+                                    proj_labels = b_labels[valid]
                                 )
                 
-            # 张量化随机选择 (替代 random.choice)
-            # 生成全局随机索引，为每个点生成随机优先级，但只针对可见的视角
+            # 张量化随机选择
             random_weights = torch.rand(visible_mask.shape, device=points.device) * visible_mask
-            # 找到权重最大的视角索引作为选中的视角
-            selected_view_idx = random_weights.argmax(dim=1) # [N]
+            selected_view_idx = random_weights.argmax(dim=1)
             
             # 提取最终特征
             row_indices = torch.arange(points.shape[0], device=points.device)
             point_features = all_candidates[row_indices, selected_view_idx]
 
-            # 为当前batch绘制最终点云特征 ============
+            # 为当前batch绘制最终点云特征
             if hasattr(self, 'vis') and self.vis is not None:
                 for b in range(B):
                     b_mask = (batch == b)
                     if not b_mask.any(): continue
-                    # 提取当前batch的点云和特征，这里的 b_features 已经是全局随机选优后的结果了
                     b_points = points[b_mask].view(-1, 3)
                     b_features = point_features[b_mask]
-                    
-                    # 只保存有特征的点
-                    # 只有被相机看到的点（在 visible_mask 中至少有一个视角为 True）才算有效
                     b_visible_any = visible_mask[b_mask].any(dim=1)
                     if b_visible_any.any():
-                        valid_points = b_points[b_visible_any]
-                        valid_features = b_features[b_visible_any]
                         self.vis.save_final_point_features(
-                            points=valid_points,
-                            features=valid_features,
+                            points=b_points[b_visible_any],
+                            features=b_features[b_visible_any],
                             batch_idx=b
                         )
 
         return point_features
-
-
-
-
-    # def sample_from_maps(self, points, batch, feature_maps, intrinsics, extrinsics, raw_imgs=None, raw_labels=None):
-    #     with torch.inference_mode():
-    #         B, V, Dim, PH, PW = feature_maps.shape
-    #         H_img, W_img = self.img_size 
-    #         point_features = torch.zeros((points.shape[0], Dim), device=points.device, dtype=points.dtype)
-            
-    #         # 检查并修正 intrinsics 和 extrinsics 的维度
-    #         # 如果它们被 Flatten 成了 [B*V, 3/4, 3/4] (3维)，需要 Reshape 回 [B, V, ...]
-    #         if intrinsics.dim() == 3: intrinsics = intrinsics.view(B, V, 3, 3)
-    #         if extrinsics.dim() == 3: extrinsics = extrinsics.view(B, V, 4, 4)
-
-    #         for b in range(B):
-    #             b_mask = (batch == b)
-    #             if not b_mask.any(): continue
-    #             b_points = points[b_mask]
-
-    #             # 准备 Label (如果提供了)
-    #             b_labels = raw_labels[b_mask] if raw_labels is not None else torch.zeros(len(b_points))
-                
-    #             # 强制转换为 2D [N, 3]
-    #             if b_points.dim() == 1:
-    #                 b_points = b_points.unsqueeze(0)
-                
-    #             b_points_f = b_points.float()
-    #             b_points_homo = torch.cat([b_points_f, torch.ones_like(b_points_f[:, :1])], dim=1)
-                
-    #             # 保存所有点的候选特征, 最后随机选择, key: 全局索引, value: 特征列表
-    #             candidates_dict = {}
-    #             for v in range(V):
-    #                 # 此时 extrinsics[b, v] 保证是 [4, 4] 矩阵
-    #                 pc_cam = (extrinsics[b, v] @ b_points_homo.transpose(0, 1)).transpose(0, 1)
-                    
-    #                 depth = pc_cam[:, 2]
-    #                 mask_z = depth > 0.1
-                    
-    #                 pc_img = (intrinsics[b, v] @ pc_cam[:, :3].transpose(0, 1)).transpose(0, 1)
-    #                 u = pc_img[:, 0] / pc_img[:, 2]
-    #                 v_coord = pc_img[:, 1] / pc_img[:, 2]
-                    
-    #                 mask_u = (u >= 0) & (u < W_img)
-    #                 mask_v = (v_coord >= 0) & (v_coord < H_img)
-    #                 valid = mask_z & mask_u & mask_v
-
-    #                 # 为了可视化，我们需要先拿到当前 View 的所有特征分配情况
-    #                 # 创建一个临时的 feat 容器给可视化用
-    #                 if hasattr(self, 'vis') and self.vis is not None:
-    #                     current_view_point_feats = torch.zeros((len(b_points), Dim), device=points.device)
-                    
-    #                 if not valid.any(): continue
-                    
-    #                 u_p = (u[valid] / 14).long().clamp(0, PW - 1)
-    #                 v_p = (v_coord[valid] / 14).long().clamp(0, PH - 1)
-                    
-    #                 feats = feature_maps[b, v, :, v_p, u_p].transpose(0, 1)
-                    
-    #                 idx_global = torch.where(b_mask)[0][valid]
-    #                 # point_features[idx_global] = feats   # 这里改用随机
-    #                 # 收集点的特征信息到字典
-    #                 for i, global_idx in enumerate(idx_global):
-    #                     idx_item = global_idx.item()
-    #                     if idx_item not in candidates_dict:
-    #                         candidates_dict[idx_item] = []
-    #                     candidates_dict[idx_item].append(feats[i])
-                    
-    #                 if hasattr(self, 'vis') and self.vis is not None:
-    #                     # 赋值给临时 (用于可视化)
-    #                     current_view_point_feats[valid] = feats
-    #                     # 仅保存第一个 View (v=0) 以节省空间，或者全部保存
-    #                     if raw_imgs is not None:
-    #                         if raw_imgs.dim() == 4:  # [B*N_views, C, H, W]
-    #                             # 计算每个batch的起始索引
-    #                             if raw_imgs.shape[0] == B * V:  # 期望的格式
-    #                                 image_idx = b * V + v
-    #                                 if image_idx < raw_imgs.shape[0]:
-    #                                     image = raw_imgs[image_idx]
-    #                                 else:
-    #                                     print(f"[WARNING] Image index {image_idx} out of bounds")
-    #                                     continue
-    #                             else:
-    #                                 # 使用简单的回退：只用第一个视图
-    #                                 if v == 0:
-    #                                     image = raw_imgs[b * (raw_imgs.shape[0] // B)]
-    #                                 else:
-    #                                     continue  # 只可视化第一个视图
-    #                         elif raw_imgs.dim() == 5:  # [B, N_views, C, H, W]
-    #                             if v < raw_imgs.shape[1]:
-    #                                 image = raw_imgs[b, v]
-    #                             else:
-    #                                 continue
-    #                         else:
-    #                             print(f"[WARNING] Unexpected image dim: {raw_imgs.dim()}")
-    #                             continue
-
-    #                         if hasattr(self, 'vis') and self.vis is not None:
-    #                             self.vis.process_frame(
-    #                                 points = b_points,
-    #                                 labels = b_labels,
-    #                                 image = image,
-    #                                 dino_map = feature_maps[b, v],
-    #                                 dino_points_feat = current_view_point_feats,
-    #                                 proj_u = u[valid],          # 投影点 U
-    #                                 proj_v = v_coord[valid],    # 投影点 V
-    #                                 proj_depth = depth[valid],  # 传入可视点的深度
-    #                                 proj_labels = b_labels[valid] # 传入可视点的语义标签
-    #                             )
-    #             # 点的图像特征随机选择
-    #             for global_idx, feat_list in candidates_dict.items():
-    #                 if feat_list:
-    #                     point_features[global_idx] = random.choice(feat_list)
-
-    #             # 为当前batch绘制最终点云特征 ============
-    #             if hasattr(self, 'vis') and self.vis is not None:
-    #                 # 提取当前batch的点云和特征
-    #                 b_points = points[b_mask]
-    #                 b_features = point_features[b_mask]
-                    
-    #                 # 只保存有特征的点
-    #                 mask = b_features.abs().sum(dim=1) > 0
-    #                 if mask.any():
-    #                     valid_points = b_points[mask]
-    #                     valid_features = b_features[mask]
-                        
-    #                     self.vis.save_final_point_features(
-    #                         points=valid_points,
-    #                         features=valid_features,
-    #                         batch_idx=b
-    #                     )
-
-    #     return point_features

@@ -1,0 +1,14 @@
+[
+    {
+        "pcd_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd.pcd",
+        "pcd_name": "20240721_163849412_imotion_zeeker6831_0_0007_new_pcd.pcd",
+        "scene_path": "/imo-baidu-label/segment_20241118/Parking_PC_240721_imotion-platform-idc500_zeeker6831_WuHuA_0/samples/scene319",
+        "bag_path": "/imo-baidu-label/segment_20241118/Parking_PC_240721_imotion-platform-idc500_zeeker6831_WuHuA_0",
+        "full_name": "20240721_163849412_imotion_zeeker6831_0_0007",
+        "json_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/data.json",
+        "tvFront_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_2_0007.png",
+        "tvRear_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_0_0007.png",
+        "tvLeft_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_3_0007.png",
+        "tvRight_path": "/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/20240721_163849412_imotion_zeeker6831_0_0007_new_pcd/20240721_163849412_imotion_zeeker6831_1_0007.png"
+    }
+]

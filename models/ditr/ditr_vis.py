@@ -230,7 +230,7 @@ class DITRVisualizer:
         plt.imshow(img)
         # 使用 scatter 的 c 参数传入深度，cmap='jet' (蓝-青-黄-红)
         # s=1~3 调节大小
-        plt.scatter(u_np, v_np, c=d_np, cmap='jet', s=1.5, alpha=0.7)
+        plt.scatter(u_np, v_np, c=d_np, cmap='jet', s=0.2, alpha=0.7)
         plt.colorbar(label='Depth (m)')
         plt.axis('off')
         plt.savefig(filepath, bbox_inches='tight', pad_inches=0, dpi=150)
@@ -261,7 +261,7 @@ class DITRVisualizer:
 
         plt.figure(figsize=(10, 6))
         plt.imshow(img)
-        plt.scatter(u_np, v_np, c=point_colors, s=1.5, alpha=0.8)
+        plt.scatter(u_np, v_np, c=point_colors, s=0.2, alpha=0.8)
         plt.axis('off')
         plt.savefig(filepath, bbox_inches='tight', pad_inches=0, dpi=150)
         plt.close()

@@ -62,26 +62,6 @@ class DINOFeatureExtractor(nn.Module):
             # images: [B, N_views, 3, H, W] -> Flatten -> [B*N, 3, H, W]
             b, n, c, h, w = images.shape
             x = images.view(b * n, c, h, w)
-        elif images.dim() == 4:
-            # [Batch*N_views, C, H, W] -> 维度被合并的情况
-            # nuScenes 固定有 6 个相机，这里考虑其他情况
-            total_n, c, h, w = images.shape
-            n = None
-            for v in (7, 6, 5, 4, 3, 2):
-                if total_n % v == 0:
-                    n = v
-                    break
-            if n is None:
-                # fallback: treat each item as its own view (batch size = 1)
-                n = total_n 
-            # 确保 total_n 能被 n 整除，否则说明数据有问题（只针对nuScenes ）
-            if total_n % n != 0:
-                # 容错：如果不是 n 的倍数，可能 batch_size=1 且只有 1 个 view? 
-                # 假如出错，这里会抛出异常
-                raise ValueError(f"Images shape {images.shape} implies flattened batch, but {total_n} is not divisible by 6 views.")
-            
-            b = total_n // n
-            x = images # 已经是 [B*N, C, H, W] 了，不需要 view
         else:
             raise ValueError(f"Unexpected images shape: {images.shape}. Expected 4 or 5 dimensions.")
         
@@ -114,64 +94,6 @@ class DITRInjector(nn.Module):
         if debug:
             os.makedirs(output_dir, exist_ok=True)
             print(f"[DITR] Debug mode enabled. Visualization will be saved to {output_dir}")
-
-    def project_and_sample(self, points, batch_idx, imgs, intrinsics, extrinsics):
-        # 1. 提取图片特征 (调用上面的 timm dino)
-        dino_features = self.dino(imgs)
-        B, N_views, Dim, PH, PW = dino_features.shape
-        H, W = imgs.shape[-2], imgs.shape[-1]
-        
-        point_features = torch.zeros((points.shape[0], Dim), device=points.device, dtype=points.dtype)
-
-        # 逐个 Batch 处理
-        for b in range(B):
-            b_mask = (batch_idx == b)
-            if not b_mask.any(): continue
-            
-            b_points = points[b_mask]
-            b_points_homo = torch.cat([b_points, torch.ones_like(b_points[:, :1])], dim=1)
-            
-            for v in range(N_views):
-                # 投影 Lidar -> Camera
-                pc_cam = (extrinsics[b, v] @ b_points_homo.T).T
-                depth = pc_cam[:, 2]
-                # 1. 深度检查 (Z-Check): 检查点是否在相机前方
-                # 相机坐标系中，Z轴通常朝前。Z < 0 表示点在相机背后，我们设置 > 0.1 是为了防止除以接近0的数导致数值不稳定。
-                valid_z = depth > 0.1
-                
-                # 投影 Camera -> Pixel
-                pc_img = (intrinsics[b, v] @ pc_cam[:, :3].T).T
-                u = pc_img[:, 0] / pc_img[:, 2]
-                v_coord = pc_img[:, 1] / pc_img[:, 2]
-                
-                # 2. 图像边界检查 (FOV Check): 检查点是否落在成像平面内
-                # u, v 是像素坐标。如果 u < 0 或 u >= W，说明点在相机水平视场角之外，同理 v < 0 或 v >= H 说明在垂直视场角之外。
-                valid_u = (u >= 0) & (u < W)
-                valid_v = (v_coord >= 0) & (v_coord < H)
-                valid = valid_z & valid_u & valid_v
-                
-                if not valid.any(): continue
-                
-                # 计算 Patch 索引
-                u_patch = (u[valid] / self.patch_size).long().clamp(0, PW - 1)
-                v_patch = (v_coord[valid] / self.patch_size).long().clamp(0, PH - 1)
-                
-                # 采样
-                feats_map = dino_features[b, v] 
-                sampled_feats = feats_map[:, v_patch, u_patch].T 
-                
-                global_indices = torch.where(b_mask)[0][valid]
-                point_features[global_indices] = sampled_feats
-                
-                # 可视化 (仅第一个 Batch 的第一个 View)
-                if self.debug and b == 0 and v == 0:
-                     self.viz_projection(imgs[b,v], u[valid], v_coord[valid], f"proj_batch{b}_view{v}.png")
-                     self.viz_dino_pca(feats_map, f"dino_pca_batch{b}_view{v}.png")
-
-        if self.debug:
-            self.viz_pcd_features(points, point_features, "pcd_dino_features.ply")
-
-        return point_features
 
     def viz_projection(self, img_tensor, u, v, fname):
         # 反归一化

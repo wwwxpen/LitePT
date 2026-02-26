@@ -12,3 +12,6 @@ from .waymo import WaymoDataset
 
 # dataloader
 from .dataloader import MultiDatasetDataloader
+
+# imotion
+from .imotion import ImotionDataset
