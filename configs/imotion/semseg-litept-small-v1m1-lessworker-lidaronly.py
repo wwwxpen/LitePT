@@ -222,7 +222,8 @@ data = dict(
                 type="Collect",
 
                 # 【修改】 增加视觉相关的 key，保留 inverse 等验证需要的 key
-                keys=collect_keys + ("origin_segment", "inverse"),
+                # keys=collect_keys + ("origin_segment", "inverse"),
+                keys=collect_keys + ("origin_segment",),  # 去除inverse，防止异常密集点对iou带来的干扰
 
                 feat_keys=("coord", "strength"),
             ),
