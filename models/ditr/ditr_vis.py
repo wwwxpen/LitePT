@@ -116,13 +116,13 @@ class DITRVisualizer:
         labels_np = labels.detach().cpu().numpy()
         
         np.random.seed(42)
-        max_label = labels_np.max() + 1
+        max_label = int(labels_np.max() + 1)  # 转换为整数
         colors_map = np.random.uniform(0, 1, size=(max_label, 3))
         
         colors = np.zeros_like(points_np)
         valid_mask = labels_np >= 0
         if valid_mask.any():
-            colors[valid_mask] = colors_map[labels_np[valid_mask]]
+            colors[valid_mask] = colors_map[labels_np[valid_mask].astype(np.int64)]
         
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points_np)

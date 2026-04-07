@@ -25,20 +25,25 @@ class ImotionDataset(DefaultDataset):
     def __init__(self,
                  split=(),
                  data_root="data/imotion",
+                 transform=None,
+                 test_cfg=None,
                  load_camera=False,
                  img_size=(448, 560),
-                 test_mode=True,
-                 true_test=False,
+                 test_mode=None,
+                 validation_mode=False,
                  ignore_index=-1,
+                 denoise=False,
                  **kwargs):
+        self.data_root = data_root
         self.load_camera = load_camera
         self.test_mode = test_mode
-        self.true_test = true_test
+        self.validation_mode = validation_mode
         self.ignore_index = ignore_index
+        self.denoise = denoise
         if self.load_camera:
             self.cam_names = self.CAMERA_TYPES
             self.img_size = img_size
-            print(f"Initialized ImotionDataset with load_camera={self.load_camera}, img_size={self.img_size}, test_mode={self.test_mode}, true_test={self.true_test}")
+            print(f"Initialized ImotionDataset with load_camera={self.load_camera}, img_size={self.img_size}, test_mode={self.test_mode}, validation_mode={self.validation_mode}, ignore_index={self.ignore_index}, denoise={self.denoise}")
             # DINOv2 官方推荐的归一化参数
             # self.transform_img = T.Compose([
             #     T.Resize(self.img_size), # Resize ((h, w))
@@ -48,7 +53,7 @@ class ImotionDataset(DefaultDataset):
             # 提前转为 numpy 格式，方便在线程中直接计算
             self.img_mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
             self.img_std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
-        super().__init__(split=split, data_root=data_root, **kwargs)
+        super().__init__(split=split, data_root=data_root, transform=transform, test_mode=test_mode, test_cfg=test_cfg, **kwargs)
 
     def _get_json_list(self, json_path):
         """
@@ -71,13 +76,8 @@ class ImotionDataset(DefaultDataset):
             }
             # 2. 根据 load_camera 决定是否加载视觉相关路径
             if self.load_camera:
-                # 严格对应顺序: Front, Left, Rear, Right (与 self.cam_names 一致)
-                img_paths = [
-                    info.get("tvFront_path"),
-                    info.get("tvLeft_path"),
-                    info.get("tvRear_path"),
-                    info.get("tvRight_path")
-                ]
+                # 与 self.cam_names 一致
+                img_paths = [info.get(f"{cam}_path") for cam in self.cam_names]
                 # 获取当前条目指定的 data.json 路径
                 calib_path = info.get("json_path")
                 # 更新字典，包含视觉全量信息
@@ -90,10 +90,18 @@ class ImotionDataset(DefaultDataset):
         return data_list
 
     def get_data_list(self):
-        # 推理模式：直接遍历 samples/scene*/lidarFusion_pcd/*.pcd
-        if self.test_mode and not self.true_test:
+        # 推理模式且非验证模式（无gt）：直接遍历 samples/scene*/lidarFusion_pcd/*.pcd
+        if self.test_mode and not self.validation_mode:
+            print("data_root =", self.data_root)
             data_list = []
-            scene_paths = sorted(glob.glob(os.path.join(self.data_root, "samples", "scene*")))
+            # denoise去噪模式，直接返回data_root下所有pcd，无需图像
+            if self.denoise:
+                pcds = sorted(glob.glob(os.path.join(self.data_root, "*.pcd")))
+                for p in pcds:
+                    data_list.append({"pcd_path": p})
+                return data_list  
+            # 正常模式
+            scene_paths = sorted(glob.glob(os.path.join(self.data_root, "*scene*")))
             for scene in scene_paths:
                 pcd_dir = os.path.join(scene, "lidarFusion_pcd")
                 if os.path.isdir(pcd_dir):
@@ -109,7 +117,7 @@ class ImotionDataset(DefaultDataset):
                             data_list.append({
                                 "pcd_path": p,
                                 "img_paths": img_paths,
-                                "json_path": os.path.join(self.data_root, "data.json"),
+                                "json_path": os.path.join(os.path.dirname(self.data_root), "data.json"),
                                 "scene_path": scene
                             })
                         else:
@@ -117,10 +125,10 @@ class ImotionDataset(DefaultDataset):
             return data_list            
         # 训练模式：根据索引文件读取路径列表
         else:
-            train_data = self._get_json_list("/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/seg_GT_info_4train_clean_badcase_complete.json")
-            val_data = self._get_json_list("/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/seg_GT_info_4val_clean_badcase_complete.json")
-            test_data = self._get_json_list("/mlp/data_loop/workspace_wxp/LitePT_IMotion/LitePT/seg_GT_info_4test_clean_badcase_complete.json")
-            print("self.data_root =", self.data_root)
+            train_data = self._get_json_list("/mlp/data_loop/workspace_wxp/seg_GT/seg_GT_pcds_4train_clean_data/seg_GT_info_4train_clean_badcase_complete.json")
+            val_data = self._get_json_list("/mlp/data_loop/workspace_wxp/seg_GT/seg_GT_pcds_4train_clean_data/seg_GT_info_4val_clean_badcase_complete.json")
+            test_data = self._get_json_list("/mlp/data_loop/workspace_wxp/seg_GT/seg_GT_pcds_4train_clean_data/seg_GT_info_4test_clean_badcase_complete.json")
+            print("data_root =", self.data_root)
             print(f"Loaded {len(train_data)} training samples, {len(val_data)} validation samples, {len(test_data)} test samples from JSON index files.")
 
             split_dict = {"train": train_data, "val": val_data, "test": test_data, }
@@ -214,7 +222,7 @@ class ImotionDataset(DefaultDataset):
         data_path = item["pcd_path"]
 
         # PCD 读取
-        if self.test_mode and self.true_test:
+        if self.test_mode and not self.validation_mode:
             scan = da_io.read_pcd_xyzi_structured(data_path)
             coord=scan[:, :3]
             segment = np.ones((scan.shape[0],), dtype=np.int64) * self.ignore_index
@@ -223,14 +231,21 @@ class ImotionDataset(DefaultDataset):
             coord=scan[:, :3]
             segment = segment.reshape(-1).astype(np.int64)
 
-            
-        data_dict = dict(
-            coord=scan[:, :3],
-            color=coord.copy(),
-            strength=scan[:, -1].reshape([-1, 1]) / 255.0, 
-            segment=segment, 
-            name=os.path.splitext(os.path.basename(data_path))[0],
-        )
+        if self.load_camera:    
+            data_dict = dict(
+                coord=scan[:, :3],
+                color=coord.copy(),  # 【新增】 使用原始坐标作为颜色输入，便于同步下采样
+                strength=scan[:, -1].reshape([-1, 1]) / 255.0, 
+                segment=segment, 
+                name=os.path.splitext(os.path.basename(data_path))[0],
+            )
+        else:
+            data_dict = dict(
+                coord=scan[:, :3],
+                strength=scan[:, -1].reshape([-1, 1]) / 255.0, 
+                segment=segment, 
+                name=os.path.splitext(os.path.basename(data_path))[0],
+            )
 
         # 2. 视觉模态逻辑 (仅在 load_camera=True 时加载TurboJPEG和线程池)
         # 视觉模态读取
@@ -258,5 +273,4 @@ class ImotionDataset(DefaultDataset):
                 extrinsics=np.array(extrinsics).astype(np.float32),
                 img_target_size=np.array([self.img_size[0], self.img_size[1]]).astype(np.float32)
             ))
-
         return data_dict

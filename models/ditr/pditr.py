@@ -230,20 +230,25 @@ class PDITR_LitePT(LitePT):
         target_size: [H, W] 目标图像尺寸
         """
         model = params['model']
-        H_target, W_target = target_size
-        H_base, W_base = params['base_size']
+        device = pc_cam.device
+        H_target, W_target = torch.tensor(target_size, device=device)
+        H_base, W_base = torch.tensor(params['base_size'], device=device)
         scale_h = H_target / H_base
         scale_w = W_target / W_base
 
         if model == "mei":
             # 对应 mei_pro.py 逻辑
-            ksi = params['ksi']
-            k = params['k']
+            # ksi = torch.tensor(params['ksi'], device=device)
+            # k = torch.tensor(params['k'], device=device)
+            ksi = params['ksi'].clone().detach().to(device) if torch.is_tensor(params['ksi']) else torch.tensor(params['ksi'], device=device)
+            k = params['k'].clone().detach().to(device) if torch.is_tensor(params['k']) else torch.tensor(params['k'], device=device)
             if len(k) == 4:
-                k.append(0.0)
-            k1, k2, p1, p2, k3 = k
-            u0, v0 = params['center']
-            gama1, gama2 = params['gama']
+                k1, k2, p1, p2= k
+                k3 = 0.0
+            else:
+                k1, k2, p1, p2, k3 = k
+            u0, v0 = torch.tensor(params['center'], device=device)
+            gama1, gama2 = torch.tensor(params['gama'], device=device)
             gama1 = gama1 * gama2 # 按照 mei_pro.py: gama1 = gama1 * gama2
 
             # 归一化到单位球面
@@ -317,7 +322,7 @@ class PDITR_LitePT(LitePT):
                 
                 for v in range(V):
                     # 此时 extrinsics[b, v] 保证是 [4, 4] 矩阵
-                    pc_cam_homo = (extrinsics[b, v] @ b_points_homo.T).T
+                    pc_cam_homo = (extrinsics[b, v].to(b_points_homo.dtype) @ b_points_homo.T).T
                     # 转换为3D点：移除最后一维（应该是1）
                     pc_cam = pc_cam_homo[:, :3] / pc_cam_homo[:, 3:4]  # 归一化
                     
@@ -360,7 +365,7 @@ class PDITR_LitePT(LitePT):
                                     proj_u = u[valid],
                                     proj_v = v_coord[valid],
                                     proj_depth = depth[valid],
-                                    proj_labels = b_labels[valid]
+                                    proj_labels = b_labels[valid.cpu()]
                                 )
                 
             # 张量化随机选择

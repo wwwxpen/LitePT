@@ -1,35 +1,16 @@
-FROM imotion-cn-beijing.cr.volces.com/imotion-img-space/occ_litept:20260204_addPyTurboJPEG
+FROM imotion-cn-beijing.cr.volces.com/imotion-img-space/occ_litept:20260323_installnumba
 
 # 设置环境变量（在 SHELL 之前设置）
 ENV PATH="/opt/conda/envs/base/bin:/opt/conda/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    # PCL 核心依赖
-    libpcl-dev \
-    libusb-1.0-0-dev \
-    libusb-dev \
-    libudev-dev \
-    freeglut3-dev \
-    pkg-config \
-    libboost-all-dev \
-    libeigen3-dev \
-    libflann-dev \
-    libvtk7-dev \
-    libvtk7-qt-dev \
-    libqhull-dev \
-    libopenni2-dev \
-    libopenni-dev \
-    libopencv-dev \
-    # python3-opencv \
-    && rm -rf /var/lib/apt/lists/*
-
 # 复制应用代码
+RUN rm -rf /root/LitePT
 RUN mkdir -p /root/LitePT
 COPY configs /root/LitePT/configs
 COPY da_binds /root/LitePT/da_binds
 COPY datasets /root/LitePT/datasets
+COPY deploy /root/LitePT/deploy
 COPY engines /root/LitePT/engines
 COPY libs /root/LitePT/libs
 COPY litept /root/LitePT/litept
@@ -38,6 +19,8 @@ COPY models /root/LitePT/models
 COPY scripts /root/LitePT/scripts
 COPY tools /root/LitePT/tools
 COPY utils /root/LitePT/utils
+COPY *.py /root/LitePT/
+COPY *.sh /root/LitePT/
 
 # 设置工作目录
 WORKDIR /root/LitePT
@@ -46,27 +29,7 @@ WORKDIR /root/LitePT
 SHELL ["conda", "run", "-n", "base", "/bin/bash", "-c"]
 
 # 安装 Python 包（在复制代码之前安装可以更好地利用 Docker 缓存）
-RUN conda run -n base pip install --no-cache-dir opencv-python pybind11
-
-# 编译da_binds（使用 pybind11 的 CMake 路径）
-RUN cd /root/LitePT/da_binds && \
-    rm -rf build && \
-    mkdir -p build && \
-    cd build && \
-    # 获取 pybind11 的 CMake 目录
-    export pybind11_DIR=$(python -c "import pybind11; print(pybind11.get_cmake_dir())") && \
-    echo "Using pybind11 from: $pybind11_DIR" && \
-    cmake .. -Dpybind11_DIR=$pybind11_DIR && \
-    make -j 9 && \
-    make install
-
-# 在 base conda 环境中降级 numpy 到 2.0.0 以下
-RUN conda run -n base pip install "numpy<2.0.0" --force-reinstall
-
-# 验证安装
-RUN python -c "import cv2; print('OpenCV version:', cv2.__version__)" && \
-    python -c "import pybind11; print('pybind11 version:', pybind11.__version__)" && \
-    ls -la /root/LitePT/da_binds/build/
+# RUN conda run -n base pip install --no-cache-dir numba
 
 # 设置默认命令（可选）
 CMD ["/bin/bash"]

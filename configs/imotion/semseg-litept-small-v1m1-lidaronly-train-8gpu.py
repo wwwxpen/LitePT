@@ -1,7 +1,7 @@
 _base_ = ["../_base_/default_runtime.py"]
 
 # 【新增】 定义视觉模态的开关和参数
-use_visual_modality = True  # 【总开关】：True=使用DINO图片特征，False=原始LitePT模式
+use_visual_modality = False  # 【总开关】：True=使用DINO图片特征，False=原始LitePT模式
 dino_backbone_name = "dinov2_vitl14"
 # 为不同大小的 dinov2 指定本地权重路径（按需修改为实际路径）
 dinov2_local_weights = {
@@ -17,25 +17,27 @@ dinov2_dims = {
 }
 dino_dim = dinov2_dims.get(dino_backbone_name, 1024)  # ViT-L 的特征维度, 默认 1024
 img_size = (448, 560)  # 输入图像尺寸, 论文中针对 Imotion 的推荐尺寸,（按需调整以控制显存/性能）
-vis_active=True  # 是否激活可视化
+vis_active=False  # 是否激活可视化
 vis_output_dir="vis_ditr_output"  # 可选输出路径
 vis_switches=dict(  # 从配置接收可视化开关
-    save_raw_pcd=True,
-    save_raw_img=True,
-    save_proj=True,
-    save_dino_map=True,
-    save_dino_pcd=True,
-    save_final_pcd=True
+    save_raw_pcd=False,
+    save_raw_img=False,
+    save_proj=False,
+    save_dino_map=False,
+    save_dino_pcd=False,
+    save_final_pcd=False
 )
 
+enable_wandb=False
+
 # misc custom setting
-batch_size = 2  # bs: total bs in all gpus
-num_worker = 4
-mix_prob = 0.0 #0.8
+batch_size = 32  # bs: total bs in all gpus
+num_worker = 64
+mix_prob = 0.8
 empty_cache = False
 enable_amp = True
 
-save_path = "exp/imotion/semseg-litept-small-v1m1-lessworker-fusion"
+save_path = "exp/imotion/semseg-litept-small-v1m1-lidaronly"
 
 # model settings
 model = dict(
@@ -65,7 +67,7 @@ model = dict(
         enc_num_head=(2, 4, 8, 14, 28),
         enc_patch_size=(1024, 1024, 1024, 1024, 1024),
         enc_conv=(True, True, True, False, False),
-        enc_attn=(False, False, False, True, True),
+        enc_attn=(False, False, True, True, True),
         enc_rope_freq=(100.0, 100.0, 100.0, 100.0, 100.0),
         dec_depths=(0, 0, 0, 0),
         dec_channels=(72, 72, 144, 252),
@@ -145,7 +147,7 @@ names = [
 ]
 
 # 【新增】 动态定义 Collect 需要收集的 Key，如果开启视觉，需要多收集 imgs, cam_params, extrinsics
-collect_keys = ("coord", "grid_coord", "segment")
+collect_keys = ("coord", "grid_coord")
 if use_visual_modality:
     collect_keys = collect_keys + ("color", "imgs", "extrinsics", "cam_params", "img_target_size")
 
@@ -186,10 +188,8 @@ data = dict(
             dict(type="Update", keys_dict={"grid_size": 0.05}),
             dict(
                 type="Collect",
-
                 # 【修改】 使用上面动态定义的 keys
-                keys=collect_keys + ("grid_size",),
-
+                keys=collect_keys + ("segment", "grid_size"),
                 feat_keys=("coord", "strength"),
             ),
         ],
@@ -220,11 +220,9 @@ data = dict(
             dict(type="ToTensor"),
             dict(
                 type="Collect",
-
                 # 【修改】 增加视觉相关的 key，保留 inverse 等验证需要的 key
                 # keys=collect_keys + ("origin_segment", "inverse"),
-                keys=collect_keys + ("origin_segment",),  # 去除inverse，防止异常密集点对iou带来的干扰
-
+                keys=collect_keys + ("segment", "origin_segment"),  # 去除inverse，防止异常密集点对iou带来的干扰
                 feat_keys=("coord", "strength"),
             ),
         ],
@@ -251,6 +249,7 @@ data = dict(
             ),
         ],
         test_mode=True,
+        validation_mode=True,  # 推理模式必须为False，因为不读取gt，且需要读取文件，train模式建议为True，validation模式必须为True，并设置对应json文件
         test_cfg=dict(
             voxelize=dict(
                 type="GridSample",
@@ -264,10 +263,8 @@ data = dict(
                 dict(type="ToTensor"),
                 dict(
                     type="Collect",
-
                     # 【修改】 增加视觉相关的 key
                     keys = collect_keys + ("index",),
-
                     feat_keys=("coord", "strength"),
                 ),
             ],

@@ -29,13 +29,13 @@ vis_switches=dict(  # 从配置接收可视化开关
 )
 
 # misc custom setting
-batch_size = 8  # bs: total bs in all gpus
-num_worker = 16
+batch_size = 2  # bs: total bs in all gpus
+num_worker = 4
 mix_prob = 0.8
 empty_cache = False
 enable_amp = True
 
-save_path = "exp/imotion/semseg-litept-small-v1m1-lidaronly"
+save_path = "exp/imotion/semseg-litept-small-v1m1-lessworker-lidaronly"
 
 # model settings
 model = dict(
