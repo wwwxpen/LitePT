@@ -23,7 +23,7 @@ def draw_full_expanded_ditr():
     with dot.subgraph(name='cluster_inputs') as c:
         c.attr(style='invis')
         c.node('IMG', 'Images', fillcolor=C_VIS)
-        c.node('DINO', 'DINOv2\n(Backbone)', fillcolor=C_VIS, shape='component')
+        c.node('DINO', 'DINO\n(Backbone)', fillcolor=C_VIS, shape='component')
         c.node('PROJ', 'Project & Sample\n(2D->3D)', fillcolor=C_INJECT, shape='diamond')
         c.node('PC_IN', 'Input Point Cloud', fillcolor=C_PT_DATA)
         

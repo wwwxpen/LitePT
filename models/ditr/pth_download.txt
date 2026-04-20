@@ -1,3 +1,15 @@
+Dinov2(feature提取时候需要为out[:, 1:, :])
 https://huggingface.co/timm/vit_large_patch14_dinov2.lvd142m/resolve/main/pytorch_model.bin
 https://huggingface.co/timm/vit_base_patch14_dinov2.lvd142m/resolve/main/pytorch_model.bin
 https://huggingface.co/timm/vit_small_patch14_dinov2.lvd142m/resolve/main/pytorch_model.bin
+
+Dinov2寄存器版本(暂未尝试，feature提取时候需要为out[:, 5:, :])
+https://huggingface.co/timm/vit_small_patch14_reg4_dinov2.lvd142m/resolve/main/pytorch_model.bin
+https://huggingface.co/timm/vit_base_patch14_reg4_dinov2.lvd142m/resolve/main/pytorch_model.bin
+https://huggingface.co/timm/vit_large_patch14_reg4_dinov2.lvd142m/resolve/main/pytorch_model.bin
+
+Dinov3(feature提取时候需要为out[:, 5:, :])
+https://huggingface.co/timm/vit_small_patch16_dinov3.lvd1689m/resolve/main/model.safetensors
+https://huggingface.co/timm/vit_small_plus_patch16_dinov3.lvd1689m/resolve/main/model.safetensors
+https://huggingface.co/timm/vit_base_patch16_dinov3.lvd1689m/resolve/main/model.safetensors
+https://huggingface.co/timm/vit_large_patch16_dinov3.lvd1689m/resolve/main/model.safetensors

@@ -3,10 +3,22 @@
 data_dir=$1
 dataset=$2
 result_dir=$3
-model_dir="deploy/model_last-lidaronly.pth"
-config_template="configs/imotion/semseg-litept-small-v1m1-lidaronly.py"
-# config_template="configs/imotion/semseg-litept-small-v1m1-fusion.py"
 num_gpu=$4
+use_vision=${5:-"false"}
+
+# Set model and config template based on use_vision flag
+if [ "$use_vision" = "true" ]; then
+    # vision 模式（融合）
+    model_dir="deploy/model_last-fusion.pth"
+    config_template="configs/imotion/semseg-litept-small-v1m1-fusion.py"
+elif [ "$use_vision" = "false" ]; then
+    # lidar only 模式
+    model_dir="deploy/model_last-lidaronly.pth"
+    config_template="configs/imotion/semseg-litept-small-v1m1-lidaronly.py"
+else
+    echo "错误: use_vision 参数只能是 'true' 或 'false'，当前值为: '$use_vision'"
+    exit 1
+fi
 
 data_root=${data_dir}/${dataset}/samples
 

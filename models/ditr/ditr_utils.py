@@ -14,16 +14,25 @@ class DINOFeatureExtractor(nn.Module):
     def __init__(self, model_name='dinov2_vitl14', local_weight_path=None, frozen=True):
         super().__init__()
         
-        # 【修改】将 DINOv2 官方名称映射到 timm 名称
+        self.num_register_tokens = 0 if 'dinov2' in model_name else 4 # 根据模型自动设置 register tokens 数量
+        self.patch_size = 14 if 'dinov2' in model_name else 16  # 根据模型自动设置 patch size
+
+        # 【修改】将 DINO 官方名称映射到 timm 名称
         # timm 的命名规则略有不同，.lvd142m 后缀代表官方权重
         name_map = {
+            # DINOv2 模型（patch size 14）
             'dinov2_vitl14': 'vit_large_patch14_dinov2.lvd142m',
             'dinov2_vitb14': 'vit_base_patch14_dinov2.lvd142m',
             'dinov2_vits14': 'vit_small_patch14_dinov2.lvd142m',
+            # DINOv3 模型（patch size 16，带寄存器）
+            "dinov3_vits16": "vit_small_patch16_dinov3.lvd1689m",
+            "dinov3_vitsp16": "vit_small_plus_patch16_dinov3.lvd1689m",
+            "dinov3_vitb16": "vit_base_patch16_dinov3.lvd1689m",
+            "dinov3_vitl16": "vit_large_patch16_dinov3.lvd1689m",
         }
         timm_name = name_map.get(model_name, model_name)
 
-        print(f"[DITR] Loading DINOv2 from timm: {timm_name}")
+        print(f"[DITR] Loading DINO from timm: {timm_name}")
         # local_weight_path 由外部传入配置文件；为 None 则使用 timm 下载/预训练
         if local_weight_path is None:
             # 未提供 local path -> 使用 timm 的 pretrained（下载）
@@ -37,7 +46,7 @@ class DINOFeatureExtractor(nn.Module):
                                         "Please provide a valid path or set local_weight_path=None to use timm pretrained.")
             pretrained_flag = False
             ckpt_path = local_weight_path
-            print(f"[DITR] Using local DINOv2 weights at: {local_weight_path}")
+            print(f"[DITR] Using local DINO weights at: {local_weight_path}")
 
 
         # dynamic_img_size=True 允许处理不同分辨率的图片输入
@@ -48,8 +57,6 @@ class DINOFeatureExtractor(nn.Module):
             num_classes=0, 
             dynamic_img_size=True 
         )
-
-        self.patch_size = 14 # DINOv2 默认为 14
         
         if frozen:
             for param in self.dino.parameters():
@@ -74,7 +81,7 @@ class DINOFeatureExtractor(nn.Module):
             # 我们只需要 patch tokens (index 1:)
             # 另外 DINOv2 有些变体可能有 register tokens，但标准版通常只有 CLS
             # 标准 ViT: out[:, 1:, :]
-            patch_features = out[:, 1:, :]
+            patch_features = out[:, (1+self.num_register_tokens):, :]
             
         dim = patch_features.shape[-1]
         p_h, p_w = h // self.patch_size, w // self.patch_size

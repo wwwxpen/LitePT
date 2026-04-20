@@ -2,7 +2,7 @@ _base_ = ["../_base_/default_runtime.py"]
 
 # 【新增】 定义视觉模态的开关和参数
 use_visual_modality = True  # 【总开关】：True=使用DINO图片特征，False=原始LitePT模式
-dino_backbone_name = "dinov2_vitl14"
+dino_backbone_name = "dinov3_vitl16"
 # 为不同大小的 dinov2 指定本地权重路径（按需修改为实际路径）
 dino_local_weights = {
     # DINOv2 模型（patch size 14）
@@ -26,7 +26,7 @@ dino_dim_map = {
     "dinov3_vitl16": 1024,  # large
 }
 dino_dim = dino_dim_map.get(dino_backbone_name, 1024)  # ViT-L 的特征维度, 默认 1024
-img_size = (448, 560)  # 输入图像尺寸, 论文中针对 Imotion 的推荐尺寸,（按需调整以控制显存/性能）
+img_size = (512, 640)  # 输入图像尺寸, 论文中针对 Imotion 的推荐尺寸,（按需调整以控制显存/性能）
 vis_active=False  # 是否激活可视化
 vis_output_dir="vis_ditr_output"  # 可选输出路径
 vis_switches=dict(  # 从配置接收可视化开关
@@ -41,8 +41,8 @@ vis_switches=dict(  # 从配置接收可视化开关
 enable_wandb=False
 
 # misc custom setting
-batch_size = 16  # bs: total bs in all gpus
-num_worker = 32
+batch_size = 32  # bs: total bs in all gpus
+num_worker = 64
 mix_prob = 0.0 #0.8
 empty_cache = False
 enable_amp = True
@@ -259,7 +259,7 @@ data = dict(
             ),
         ],
         test_mode=True,
-        validation_mode=False,  # 推理模式必须为False，因为不读取gt，且需要读取文件，train模式建议为True，validation模式必须为True，并设置对应json文件
+        validation_mode=True,  # 推理模式必须为False，因为不读取gt，且需要读取文件，train模式建议为True，validation模式必须为True，并设置对应json文件
         test_cfg=dict(
             voxelize=dict(
                 type="GridSample",
@@ -279,15 +279,15 @@ data = dict(
                 ),
             ],
             aug_transform=[
-                # [dict(type="RandomScale", scale=[0.9, 0.9])],
-                # [dict(type="RandomScale", scale=[0.95, 0.95])],
+                [dict(type="RandomScale", scale=[0.9, 0.9])],
+                [dict(type="RandomScale", scale=[0.95, 0.95])],
                 [dict(type="RandomScale", scale=[1, 1])],
                 [dict(type="RandomScale", scale=[1.05, 1.05])],
-                # [dict(type="RandomScale", scale=[1.1, 1.1])],
-                # [
-                #     dict(type="RandomScale", scale=[0.9, 0.9]),
-                #     dict(type="RandomFlip", p=1),
-                # ],
+                [dict(type="RandomScale", scale=[1.1, 1.1])],
+                [
+                    dict(type="RandomScale", scale=[0.9, 0.9]),
+                    dict(type="RandomFlip", p=1),
+                ],
                 [
                     dict(type="RandomScale", scale=[0.95, 0.95]),
                     dict(type="RandomFlip", p=1),
@@ -297,10 +297,10 @@ data = dict(
                     dict(type="RandomScale", scale=[1.05, 1.05]),
                     dict(type="RandomFlip", p=1),
                 ],
-                # [
-                #     dict(type="RandomScale", scale=[1.1, 1.1]),
-                #     dict(type="RandomFlip", p=1),
-                # ],
+                [
+                    dict(type="RandomScale", scale=[1.1, 1.1]),
+                    dict(type="RandomFlip", p=1),
+                ],
             ],
         ),
         ignore_index=ignore_index,

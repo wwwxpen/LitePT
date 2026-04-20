@@ -32,11 +32,11 @@ class PDITR_LitePT(LitePT):
         
         if self.use_visual_modality:
             # 注意：这里我们使用的是 ditr_utils 里修改过(支持本地权重)的 DINOFeatureExtractor
-            print(f"[PDITR] Initializing DINOv2: {dino_backbone_name}")
+            print(f"[PDITR] Initializing DINO: {dino_backbone_name}")
             self.dino_extractor = DINOFeatureExtractor(dino_backbone_name, dino_local_weight_path)
             self.injector = DITRInjector(self.dino_extractor, debug=False)
 
-            self.patch_size = 14 # DINOv2 默认为 14
+            self.patch_size = 14 if 'dinov2' in dino_backbone_name else 16  # 根据模型自动设置 patch size
             
             # 如果配置里没有提供 vis_switches，就使用默认值
             default_vis_switches = {

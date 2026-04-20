@@ -26,12 +26,31 @@ bash infer_zy_api.sh BagRoot BagName ResRoot GpuNum
 
 ## 验证/测试
 
+训练：
+
 conda activate base
 
 export PYTHONPATH=./
 
-python tools/test.py --config-file configs/xxx/xxx.py --num-gpus GpuNum --options save_path=xxx weight=xxx.pth
+如果在H20机器上训练，当前环境需要更改setup.py后重新编译pointrope和pointops
 
-python tools/test.py --config-file configs/imotion/semseg-litept-small-v1m1-fusion-train-8gpu.py --num-gpus 1 --options save_path=/mlp/data_loop/workspace_wxp/test-litept-infer/test-speed-bag/res/test-speed-bag weight=deploy/model_last-fusion.pth
+*cd libs/pointrope
+rm -rf build/
+find . -name ".so" -delete
+find . -name "__pycache__" | xargs rm -rf
+python setup.py install
+cd ../..
+cd libs/pointops
+rm -rf build/
+find . -name ".so" -delete
+find . -name "__pycache__" | xargs rm -rf
+python setup.py install
+cd ../..***
+
+python tools/train.py --config-file configs/xxx/xxx.py --num-gpus GpuNum --options save_path=xxx weight=xxx.pth
+
+测试：
+
+python tools/test.py --config-file configs/imotion/semseg-litept-small-v1m1-lidaronly.py --num-gpus 1 --options save_path=/mlp/data_loop/workspace_wxp/test-litept-infer/test-speed-bag/res/test-speed-bag weight=deploy/model_last-lidaronly.pth
 
 注意：验证/测试时，配置文件中的validation_mode需要设置为True，这样最终评测时就会去读取segLabel，并出评测报告。另外需要将save_path下原有的内容清除(如有)，否则会导致沿用原有结果
